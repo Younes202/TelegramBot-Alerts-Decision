@@ -4,6 +4,7 @@ class Settings:
     # Class-level attributes for settings
     RedisUrl = 'redis://localhost:6379/0'  # Example Redis URL
     volatility_trained_models = './app/volatility/trained_models/'  # Example directory for trained models
+    price_trained_models = './app/price/trained_models/'
 
 
     @classmethod

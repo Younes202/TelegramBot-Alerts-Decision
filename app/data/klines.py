@@ -70,5 +70,3 @@ class BinanceKlines:
         self.data = self.data.drop(columns=["ignored"], axis=1)
         logger.info("Data conversion to DataFrame completed.")
         return self.data
-
-

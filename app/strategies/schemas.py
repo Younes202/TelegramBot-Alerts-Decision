@@ -19,11 +19,3 @@ class DataFrameUtils:
             raise ValueError("Unsupported strategy for filling missing values.")
 
 
-class StrategyNames:
-    """Defines valid strategy names."""
-    VALID_STRATEGIES = [
-        "RSI", "SMA", "EMA", "MACD", "BollingerBands",
-        "Volume", "ATR", "Stochastic", "Fibonacci", "Trendline",
-        "rsi_ma_macd", "rsi_bb_volume", "rsi_trendlines_pricepatterns",
-        "rsi_bb_atr", "rsi_fib_ma", "rsi_stoch_bb", "rsi_volume_macd"
-    ]
