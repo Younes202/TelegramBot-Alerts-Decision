@@ -103,7 +103,7 @@ async def fetch_opportunities_for_symbols(symbols):
             # Send a message to the channel for each opportunity found
             for symbol, opportunity_data in opportunities_dict.items():
                 message = (
-                    f"🚀 *Trading Opportunity {{symbol}} Alert!*\n\n"
+                    f"🚀 *Trading Opportunity *{symbol}* Alert!*\n\n"
                     f"🔹 **Type:** *{opportunity_data['opportunity']}*\n"
                     f"💰 **Price:** `{opportunity_data['close_price']:.2f}` USDT\n"
                     f"⏰ **Time:** `{opportunity_data['close_time']}`\n\n"

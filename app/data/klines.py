@@ -22,7 +22,7 @@ class BinanceKlines:
         params = {
             "symbol": self.symbol,
             "interval": self.interval.lower(),
-            "limit": 1400  # Set the limit to the maximum of 1000
+            "limit": 1000  # Set the limit to the maximum of 1000
         }
 
         try:
