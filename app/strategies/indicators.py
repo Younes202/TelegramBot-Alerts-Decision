@@ -1,8 +1,11 @@
 import pandas_ta as ta
 from app.strategies.schemas import DataFrameUtils
 from app.strategies.exceptions import StrategyError
-from loguru import logger
+import pytz
+from datetime import timedelta
 
+# Assuming opportunity_data['close_time'] is a UTC datetime object
+morocco_tz = pytz.timezone('Africa/Casablanca')
 class Strategy:
     def __init__(self, data):
         """
@@ -75,7 +78,7 @@ class Strategy:
             data['volume_prev'] = data['volume'].shift(1)
 
             # Debugging: Log key indicators for the last data points
-            logger.debug(f"Latest RSI: {data['RSI'].iloc[-1]}, BB_lower: {data['BB_lower'].iloc[-1]}, BB_upper: {data['BB_upper'].iloc[-1]}, Volume: {data['volume'].iloc[-1]}, Previous Volume: {data['volume_prev'].iloc[-1]}")
+            #logger.debug(f"Latest RSI: {data['RSI'].iloc[-1]}, BB_lower: {data['BB_lower'].iloc[-1]}, BB_upper: {data['BB_upper'].iloc[-1]}, Volume: {data['volume'].iloc[-1]}, Previous Volume: {data['volume_prev'].iloc[-1]}")
 
             # Determine opportunities based on a combination of signals
             data['opportunity_type'] = data.apply(
@@ -86,7 +89,6 @@ class Strategy:
             )
 
             # Debugging: Log the detected opportunity for the latest data point
-            logger.debug(f"Detected opportunity: {data['opportunity_type'].iloc[-1]} for close price: {data['close_price'].iloc[-1]}")
 
             return data
 
@@ -113,5 +115,24 @@ def get_opportunity(data):
     # Apply the chosen strategy to the data
     result_data = strategy.rsi_bb_volume_strategy()
 
+    # Localize close_time to UTC (tz-naive timestamps)
+    result_data['close_time'] = result_data['close_time'].dt.tz_localize('UTC')
+
+    # Convert the close_time to Morocco timezone
+    close_time = result_data['close_time'].iloc[-1].astimezone(morocco_tz)
+
+
+      # Check if the seconds part of the time is 59, then add 1 second and adjust time
+    if close_time.second == 59:
+        close_time += timedelta(seconds=1)
+        close_time = close_time.replace(second=0)  # Set seconds to 00 after incrementing
+        # Format the close_time without the timezone abbreviation
+    close_time_str = close_time.strftime('%Y-%m-%d %H:%M:%S')  # Remove '%Z'
+
+
+    close_time_str = close_time.strftime('%Y-%m-%d %H:%M:%S %Z')  # Example format: '2024-10-10 11:23:45 UTC+1'
+
+
     # Return the last close_time, close_price, and detected opportunity_type
-    return result_data['close_time'].iloc[-1], result_data['close_price'].iloc[-1], result_data['opportunity_type'].iloc[-1]
+    return close_time_str, result_data['close_price'].iloc[-1], result_data['opportunity_type'].iloc[-1]
+

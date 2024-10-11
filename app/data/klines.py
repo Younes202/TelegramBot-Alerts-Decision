@@ -5,13 +5,11 @@ import requests
 from loguru import logger
 
 class BinanceKlines:
-    def __init__(self, symbol, interval, start_time, end_time):
+    def __init__(self, symbol, interval):
         self.symbol = symbol
         self.interval = interval
-        self.start_time = start_time
-        self.end_time = end_time
         self.data = None
-        logger.info(f"BinanceKlines initialized with symbol={symbol}, interval={interval}, start_time={start_time}, end_time={end_time}")
+        logger.info(f"BinanceKlines initialized with symbol={symbol}, interval={interval}")
 
     def fetch_and_wrangle_klines(self):
         # Fetch data directly from Binance API
@@ -21,37 +19,26 @@ class BinanceKlines:
 
     def fetch_data_from_binance(self):
         base_url = "https://api.binance.com/api/v3/klines"
-        all_klines = []
-        current_start_time = self.start_time
+        params = {
+            "symbol": self.symbol,
+            "interval": self.interval.lower(),
+            "limit": 1400  # Set the limit to the maximum of 1000
+        }
 
-        while current_start_time < self.end_time:
-            params = {
-                "symbol": self.symbol,
-                "interval": self.interval.lower(),
-                "startTime": current_start_time,
-                "endTime": self.end_time,
-                "limit": 1000  # Set the limit to the maximum of 1000
-            }
+        try:
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            klines = response.json()
 
-            try:
-                response = requests.get(base_url, params=params)
-                response.raise_for_status()
-                klines = response.json()
+            if not klines:
+                raise BinanceAPIError("No klines data returned from Binance API.")
 
-                if not klines:
-                    break  # Break the loop if no more data is returned
+            logger.info(f"Fetched {len(klines)} klines from Binance API.")
+            return klines
 
-                all_klines.extend(klines)
-                logger.info(f"Fetched {len(klines)} klines from Binance API.")
-
-                # Update current_start_time to the next batch
-                current_start_time = klines[-1][0] + 1  # Add 1 ms to avoid overlap
-
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error fetching data from Binance API: {str(e)}")
-                raise BinanceAPIError(f"Error fetching data from Binance API: {str(e)}")
-        
-        return all_klines
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching data from Binance API: {str(e)}")
+            raise BinanceAPIError(f"Error fetching data from Binance API: {str(e)}")
 
     def convert_data_to_dataframe(self):
         logger.info("Converting fetched data to DataFrame.")
@@ -70,3 +57,4 @@ class BinanceKlines:
         self.data = self.data.drop(columns=["ignored"], axis=1)
         logger.info("Data conversion to DataFrame completed.")
         return self.data
+    

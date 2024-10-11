@@ -168,4 +168,4 @@ cython_debug/
 #.idea/
 venv/
 
-app/volatility/trained_models/
+app/volatility/trained_models/.env
