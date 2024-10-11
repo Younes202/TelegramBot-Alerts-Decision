@@ -53,7 +53,7 @@ class BinanceKlines:
         params = {
             "symbol": self.symbol,
             "interval": self.interval.lower(),
-            "limit": 100  # Set the limit to 1000 for better performance
+            "limit": 60  # Set the limit to 1000 for better performance
         }
 
         try:
