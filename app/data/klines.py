@@ -1,8 +1,13 @@
+import os
+from dotenv import load_dotenv
 from app.data.exceptions import BinanceAPIError
 from app.data.schemas import KlineColumns
 import pandas as pd
 import requests
 from loguru import logger
+
+# Load environment variables from .env file
+load_dotenv()
 
 class BinanceKlines:
     def __init__(self, symbol, interval):
@@ -18,6 +23,7 @@ class BinanceKlines:
         """
         self.symbol = symbol
         self.interval = interval
+        self.api_key = os.getenv("BINANCE_API_KEY")  # Load API key from .env file
         self.data = None
         logger.info(f"BinanceKlines initialized with symbol={symbol}, interval={interval}")
 
@@ -53,12 +59,16 @@ class BinanceKlines:
         params = {
             "symbol": self.symbol,
             "interval": self.interval.lower(),
-            "limit": 60  # Set the limit to 1000 for better performance
+            "limit": 1000  # Set the limit to 1000 for better performance
+        }
+
+        headers = {
+            "X-MBX-APIKEY": self.api_key  # API key is included in the header for authentication
         }
 
         try:
             logger.info(f"Requesting Binance API for {self.symbol} with parameters: {params}")
-            response = requests.get(base_url, params=params)
+            response = requests.get(base_url, params=params, headers=headers)
             response.raise_for_status()
             klines = response.json()
 
@@ -108,6 +118,3 @@ class BinanceKlines:
         except Exception as e:
             logger.error(f"Failed to convert klines data into DataFrame: {str(e)}")
             raise BinanceAPIError(f"Error converting data to DataFrame: {str(e)}")
-
-
-        

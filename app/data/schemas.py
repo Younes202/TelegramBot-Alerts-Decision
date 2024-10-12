@@ -22,5 +22,3 @@ class CryptoPair(Enum):
     MATIC_USDT = "MATICUSDT"
     LINK_USDT = "LINKUSDT"
     UNI_USDT = "UNIUSDT"
-
-
