@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: fastapi-telegram-bot
+    env: python  # Specify the environment as Python
+    plan: free   # You can start with Render's free plan
+    buildCommand: pip install -r requirements.txt  # Install dependencies
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000  # Start FastAPI server
+    envVars:
+      - key: BOT_TOKEN
+        value: ${BOT_TOKEN}  # This will pull from Render environment variables
+      - key: CHANNEL_ID
+        value: ${CHANNEL_ID} # This will pull from Render environment variables
+    autoDeploy: true  # Automatically deploy new commits pushed to the connected repo

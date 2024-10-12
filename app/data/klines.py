@@ -108,3 +108,6 @@ class BinanceKlines:
         except Exception as e:
             logger.error(f"Failed to convert klines data into DataFrame: {str(e)}")
             raise BinanceAPIError(f"Error converting data to DataFrame: {str(e)}")
+
+
+        
