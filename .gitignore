@@ -3,11 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 data/__pycache__
-predictions/__pycache__
-price/__pycache__
-volume/__pycache__
 strategies/__pycache__
-volatility/__pycache__
 
 # C extensions
 *.so
@@ -128,7 +124,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+app/.env
 .venv
 env/
 venv/
@@ -168,4 +164,3 @@ cython_debug/
 #.idea/
 venv/
 
-app/volatility/trained_models/.env

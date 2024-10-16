@@ -1,23 +1,33 @@
+
 import uvicorn
 from fastapi import FastAPI
-from loguru import logger
-
-from app.data.klines import BinanceKlines  # Assuming this is your custom BinanceKlines module
+from app.data.klines import BinanceKlines
 from app.strategies.indicators import get_opportunity
 from pydantic import BaseModel
 import asyncio
-import requests
-
+from loguru import logger
 from dotenv import load_dotenv
 import os
+import requests
 
-# Load environment variables from the .env file
-load_dotenv()
-
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 # Access environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
+logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
+async def send_telegram_message(TEST_MESSAGE):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': CHANNEL_ID,
+        'text': TEST_MESSAGE
+    }
+    response = requests.post(url, json=payload)
+
+    if response.status_code == 200:
+        logger.info("Message sent successfully!")
+    else:
+        logger.error(f"Failed to send message: {response.status_code}, {response.text}")
 
 app = FastAPI()
 
@@ -28,6 +38,10 @@ class ResultOrder(BaseModel):
     close_price: float
     opportunity: str
     message: str
+
+# This list will track all buy/sell signals
+signals = {}
+
 
 # Utility function to fetch data for a symbol and check for an opportunity
 async def fetch_and_check_opportunity(symbol: str):
@@ -41,78 +55,66 @@ async def fetch_and_check_opportunity(symbol: str):
 
         # Apply strategy and get trading opportunity
         close_time, close_price, opportunity = get_opportunity(data)
+        logger.info(f"Opportunity detected: {opportunity} for {symbol}.")
 
-        if opportunity:
-            logger.info(f"Opportunity of {opportunity} for {symbol} at close price {close_price}")
+        # Buy Opportunity
+        if opportunity == "Buy" and symbol not in signals:
+            signals[symbol] = {
+                "buy_price": close_price,
+                "buy_time": close_time
+            }
 
-            return ResultOrder(
-                symbol=symbol,
-                close_time=close_time,
-                close_price=close_price,
-                opportunity=opportunity,
-                message=f"Opportunity found for {symbol}: {opportunity} at close price {close_price}"
+            # Send buy opportunity message to Telegram
+            message = (
+                f"🚀 Buy Opportunity for {symbol}!\n"
+                f"💰 Price: {signals[symbol]['buy_price']}\n"
+                f"⏰ Time: {signals[symbol]['buy_time']}\n"
+                f"🔔 Stay tuned for more opportunities!"
             )
-        else:
-            logger.info(f"No Opportunity for {symbol} at close price {close_price}")
-            return None
+            await send_telegram_message(message)
+
+        # Sell Opportunity based on risk management
+        elif symbol in signals:
+            buy_price = signals[symbol]['buy_price']
+            profit = close_price - buy_price
+            risk_threshold = buy_price * 0.15  # Example: 15% profit threshold
+
+            # Sell condition: Profit greater than or equal to the risk threshold
+            if close_price > buy_price and profit >= risk_threshold:
+                signals[symbol].update({
+                    "sell_price": close_price,
+                    "sell_time": close_time,
+                    "profit": profit
+                })
+                logger.info(f"Sell opportunity for {symbol}. Profit: {profit}")
+
+                # Send sell opportunity message to Telegram
+                message = (
+                    f"🚀 Sell Opportunity for {symbol}!\n"
+                    f"💰 Buy Price: {buy_price}\n"
+                    f"💰 Sell Price: {close_price}\n"
+                    f"💰 Profit: {profit}\n"
+                    f"⏰ Buy Time: {signals[symbol]['buy_time']}\n"
+                    f"⏰ Sell Time: {close_time}\n"
+                    f"🔔 Stay tuned for more opportunities!"
+                )
+                await send_telegram_message(message)
+
+                # Remove the signal after selling
+                del signals[symbol]
+
+            else:
+                logger.info(f"No sell opportunity for {symbol} at {close_price}.")
 
     except Exception as e:
         logger.error(f"Error fetching data for {symbol}: {str(e)}")
         return None
 
-# Function to send a message to the Telegram channel
-def send_telegram_message(message: str):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        'chat_id': CHANNEL_ID,  # Use the channel ID instead of group chat ID
-        'text': message,
-        'parse_mode': 'Markdown'  # Optional: enables markdown for better formatting
-    }
-    try:
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            logger.info("Message sent successfully")
-        else:
-            logger.error(f"Failed to send message: {response.status_code}, {response.text}")
-    except Exception as e:
-        logger.error(f"Error sending message: {str(e)}")
-
-# Function to fetch opportunities for multiple symbols and send messages
+# Function to fetch opportunities for multiple symbols
 async def fetch_opportunities_for_symbols(symbols):
     while True:
-        opportunities_dict = {}
-
-        # Fetch data and check opportunity for all symbols concurrently
-        tasks = [fetch_and_check_opportunity(symbol) for symbol in symbols]
-        results = await asyncio.gather(*tasks)
-
-        # Populate the dictionary with opportunities
-        for result in results:
-            if result:
-                opportunities_dict[result.symbol] = {
-                    "opportunity": result.opportunity,
-                    "close_time": result.close_time,
-                    "close_price": result.close_price
-                }
-
-        # Check if the dictionary is empty and send messages accordingly
-        if opportunities_dict:
-            print(opportunities_dict)  # Print the dictionary if not empty
-            logger.info(f"Opportunities: {opportunities_dict}")
-
-            # Send a message to the channel for each opportunity found
-            for symbol, opportunity_data in opportunities_dict.items():
-                message = (
-                    f"🚀 *Trading Opportunity *{symbol}* Alert!*\n\n"
-                    f"🔹 **Type:** *{opportunity_data['opportunity']}*\n"
-                    f"💰 **Price:** `{opportunity_data['close_price']:.2f}` USDT\n"
-                    f"⏰ **Time:** `{opportunity_data['close_time']}`\n\n"
-                    f"🔔 Stay tuned for more opportunities!"
-                )
-                send_telegram_message(message)
-
-        else:
-            logger.info("No opportunities found. Dictionary is empty.")
+        for symbol in symbols:
+            await fetch_and_check_opportunity(symbol)
 
         # Sleep for 1 minute before checking again
         await asyncio.sleep(60)
@@ -120,12 +122,21 @@ async def fetch_opportunities_for_symbols(symbols):
 # FastAPI startup event to start monitoring
 @app.on_event("startup")
 async def startup_event():
-    symbols = ["BTCUSDT", "BNBUSDT", "ETHUSDT", "DOTUSDT", "PAXGUSDT"]  # You can modify symbols as needed
+    symbols = [
+        "BTCUSDT",  # Bitcoin
+        "ETHUSDT",  # Ethereum
+        "BNBUSDT",  # Binance Coin
+        "SOLUSDT",  # Solana
+        "MATICUSDT",  # Polygon
+        "XRPUSDT"  # Ripple
+    ]
+
     logger.info("Starting monitoring for symbols...")
+    logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
     # Start fetching opportunities
     await fetch_opportunities_for_symbols(symbols)
 
+# Main entry point to run the FastAPI server
 if __name__ == "__main__":
-    # Start the FastAPI server
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
