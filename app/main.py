@@ -12,8 +12,8 @@ import requests
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 # Access environment variables
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+BOT_TOKEN = '7151560661:AAGQDuwxfXxNwgFeq6n-A5aKzx7xd5l4wNw'
+CHANNEL_ID = '-1002318535059'
 logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
 async def send_telegram_message(TEST_MESSAGE):
