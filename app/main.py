@@ -1,4 +1,3 @@
-
 import uvicorn
 from fastapi import FastAPI
 from app.data.klines import BinanceKlines
@@ -12,8 +11,8 @@ import requests
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 # Access environment variables
-BOT_TOKEN = '7151560661:AAGQDuwxfXxNwgFeq6n-A5aKzx7xd5l4wNw'
-CHANNEL_ID = '-1002318535059'
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHANNEL_ID = os.getenv('CHANNEL_ID')
 logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
 async def send_telegram_message(TEST_MESSAGE):
@@ -42,11 +41,10 @@ class ResultOrder(BaseModel):
 # This list will track all buy/sell signals
 signals = {}
 
-
 # Utility function to fetch data for a symbol and check for an opportunity
 async def fetch_and_check_opportunity(symbol: str):
     try:
-        interval = "1m"
+        interval = "5m"
         logger.info(f"Fetching data for {symbol}...")
 
         # Fetching kline data for the symbol
@@ -73,26 +71,29 @@ async def fetch_and_check_opportunity(symbol: str):
             )
             await send_telegram_message(message)
 
-        # Sell Opportunity based on risk management
-        elif symbol in signals:
+        # Sell Opportunity based on strategy signal and price check
+        elif opportunity == "Sell" and symbol in signals:
             buy_price = signals[symbol]['buy_price']
-            profit = close_price - buy_price
-            risk_threshold = buy_price * 0.15  # Example: 15% profit threshold
+            sell_price = close_price
 
-            # Sell condition: Profit greater than or equal to the risk threshold
-            if close_price > buy_price and profit >= risk_threshold:
+            # Only proceed if the sell price is greater than the buy price
+            if sell_price > buy_price:
+                profit = sell_price - buy_price
+
+                # Update the signal with sell information
                 signals[symbol].update({
-                    "sell_price": close_price,
+                    "sell_price": sell_price,
                     "sell_time": close_time,
                     "profit": profit
                 })
+
                 logger.info(f"Sell opportunity for {symbol}. Profit: {profit}")
 
                 # Send sell opportunity message to Telegram
                 message = (
                     f"🚀 Sell Opportunity for {symbol}!\n"
                     f"💰 Buy Price: {buy_price}\n"
-                    f"💰 Sell Price: {close_price}\n"
+                    f"💰 Sell Price: {sell_price}\n"
                     f"💰 Profit: {profit}\n"
                     f"⏰ Buy Time: {signals[symbol]['buy_time']}\n"
                     f"⏰ Sell Time: {close_time}\n"
@@ -104,7 +105,7 @@ async def fetch_and_check_opportunity(symbol: str):
                 del signals[symbol]
 
             else:
-                logger.info(f"No sell opportunity for {symbol} at {close_price}.")
+                logger.info(f"Sell signal detected but sell price {sell_price} is not greater than buy price {buy_price}.")
 
     except Exception as e:
         logger.error(f"Error fetching data for {symbol}: {str(e)}")
@@ -116,8 +117,8 @@ async def fetch_opportunities_for_symbols(symbols):
         for symbol in symbols:
             await fetch_and_check_opportunity(symbol)
 
-        # Sleep for 1 minute before checking again
-        await asyncio.sleep(60)
+        # Sleep for 15 minutes before checking again
+        await asyncio.sleep(301)  # 15 minutes (900 seconds)
 
 # FastAPI startup event to start monitoring
 @app.on_event("startup")
@@ -125,12 +126,14 @@ async def startup_event():
     symbols = [
         "BTCUSDT",  # Bitcoin
         "ETHUSDT",  # Ethereum
-        "BNBUSDT",  # Binance Coin
+        "BNBUSDT",  # BNB
+        "ADAUSDT",  # Cardano
+        "DOGEUSDT", # Dogecoin
         "SOLUSDT",  # Solana
-        "MATICUSDT",  # Polygon
-        "XRPUSDT"  # Ripple
+        "DOTUSDT",  # Polkadot
+        "MATICUSDT"  # Polygon
     ]
-
+    
     logger.info("Starting monitoring for symbols...")
     logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
