@@ -3,6 +3,8 @@ from app.strategies.schemas import DataFrameUtils
 from app.strategies.exceptions import StrategyError
 import pytz
 from datetime import timedelta
+import pandas as pd
+from loguru import logger
 
 # Timezone for Morocco
 morocco_tz = pytz.timezone('Africa/Casablanca')
@@ -20,30 +22,75 @@ class Strategy:
         except Exception as e:
             raise StrategyError(f"Failed to apply strategy: {e}")
 
-    def rsi_bollinger_buy_strategy(self):
+    def enhanced_strategy(self):
         def strategy_logic(data):
-            # Calculate RSI with a default period (14)
+            # Ensure 'close_time' is a proper datetime index
+            if not pd.api.types.is_datetime64_any_dtype(data.index):
+                logger.error("'close_time' is not set as a proper datetime index.")
+                raise ValueError("'close_time' is missing or not properly set.")
+
+            # Now apply the indicators since the datetime index is ensured
+            # Calculate RSI (14 period)
             data['RSI'] = ta.rsi(data['close_price'], length=14)
 
-            # Calculate Bollinger Bands (20 period, 2 standard deviation)
+            # Calculate Bollinger Bands (20 period, 2 std deviation)
             bbands = ta.bbands(data['close_price'], length=20, std=2.0)
-            data['BB_lower'] = bbands['BBL_20_2.0']  # Lower Bollinger Band
-            data['BB_upper'] = bbands['BBU_20_2.0']  # Upper Bollinger Band
+            data['BB_lower'] = bbands['BBL_20_2.0']
+            data['BB_upper'] = bbands['BBU_20_2.0']
 
-            # Buy signal if RSI < 40 and price is close to the lower Bollinger Band
+            # Calculate Moving Averages (MA)
+            data['MA_10'] = ta.sma(data['close_price'], length=10)
+            data['MA_50'] = ta.sma(data['close_price'], length=50)
+
+            # Calculate Exponential Moving Averages (EMA)
+            data['EMA_9'] = ta.ema(data['close_price'], length=9)
+            data['EMA_21'] = ta.ema(data['close_price'], length=21)
+
+            # Calculate MACD
+            macd = ta.macd(data['close_price'], fast=12, slow=26, signal=9)
+            data['MACD'] = macd['MACD_12_26_9']
+            data['MACD_signal'] = macd['MACDs_12_26_9']
+
+            # Calculate VWAP (VWAP requires a datetime index)
+            data['VWAP'] = ta.vwap(data['high_price'], data['low_price'], data['close_price'], data['volume'])
+
+            # Buy signal if RSI < 40, price near lower Bollinger Band, and moving averages crossover
             data['opportunity_type'] = data.apply(
-                lambda row: "Buy" if row['RSI'] < 40 and row['close_price'] <= row['BB_lower'] else None,
+                lambda row: "Buy" if row['RSI'] < 40 and row['close_price'] <= row['BB_lower'] 
+                            and row['MA_10'] > row['MA_50'] and row['EMA_9'] > row['EMA_21'] 
+                            and row['MACD'] > row['MACD_signal'] and row['close_price'] > row['VWAP']
+                            else None,
                 axis=1
             )
+
+            # Sell signal if RSI > 70, price near upper Bollinger Band, and moving averages crossover downwards
+            data['opportunity_type'] = data.apply(
+                lambda row: "Sell" if row['RSI'] > 70 or row['close_price'] >= row['BB_upper'] 
+                            and row['MA_10'] < row['MA_50'] and row['EMA_9'] < row['EMA_21'] 
+                            and row['MACD'] < row['MACD_signal'] and row['close_price'] < row['VWAP']
+                            else row['opportunity_type'],
+                axis=1
+            )
+
             return data
 
-        return self._apply_strategy(strategy_logic)
+        # Apply the strategy logic and reset the index to bring 'close_time' back as a column
+        result = self._apply_strategy(strategy_logic)
+        result.reset_index(inplace=True)  # Ensures 'close_time' is available as a column
+        return result
+
+
 
 
 
 def get_opportunity(data):
     strategy = Strategy(data)
-    result_data = strategy.rsi_bollinger_buy_strategy()
+    result_data = strategy.enhanced_strategy()
+
+    # Ensure 'close_time' is back as a column after resetting the index
+    if 'close_time' not in result_data.columns:
+        logger.error("Error: 'close_time' column is missing after applying strategy.")
+        raise ValueError("'close_time' column is missing after applying the strategy.")
 
     # Localize close_time to UTC
     result_data['close_time'] = result_data['close_time'].dt.tz_localize('UTC')

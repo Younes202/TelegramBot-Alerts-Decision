@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
-from app.data.klines import BinanceKlines
-from app.strategies.indicators import get_opportunity
+from app.data.klines import BinanceKlines  # Your Binance data handler
+from app.strategies.indicators import get_opportunity  # Import the updated strategy logic
 from pydantic import BaseModel
 import asyncio
 from loguru import logger
@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 import os
 import requests
 
+# Load environment variables (Telegram bot settings)
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
-# Access environment variables
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")
 
+# Async function to send Telegram notifications
 async def send_telegram_message(TEST_MESSAGE):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -30,7 +31,7 @@ async def send_telegram_message(TEST_MESSAGE):
 
 app = FastAPI()
 
-# Define ResultOrder for notification
+# Data model for notifications
 class ResultOrder(BaseModel):
     symbol: str
     close_time: str
@@ -38,31 +39,31 @@ class ResultOrder(BaseModel):
     opportunity: str
     message: str
 
-# This list will track all buy/sell signals
+# Store active signals
 signals = {}
 
-# Utility function to fetch data for a symbol and check for an opportunity
+# Function to fetch data for a symbol and check for trading opportunities
 async def fetch_and_check_opportunity(symbol: str):
     try:
         interval = "5m"
         logger.info(f"Fetching data for {symbol}...")
 
-        # Fetching kline data for the symbol
+        # Fetch the Kline data
         klines_instance = BinanceKlines(symbol, interval)
         data = klines_instance.fetch_and_wrangle_klines()
 
-        # Apply strategy and get trading opportunity
+        # Apply the enhanced strategy to detect opportunities
         close_time, close_price, opportunity = get_opportunity(data)
         logger.info(f"Opportunity detected: {opportunity} for {symbol}.")
 
-        # Buy Opportunity
+        # Buy Opportunity detected
         if opportunity == "Buy" and symbol not in signals:
             signals[symbol] = {
                 "buy_price": close_price,
                 "buy_time": close_time
             }
 
-            # Send buy opportunity message to Telegram
+            # Send the buy opportunity message to Telegram
             message = (
                 f"🚀 Buy Opportunity for {symbol}!\n"
                 f"💰 Price: {signals[symbol]['buy_price']}\n"
@@ -71,12 +72,12 @@ async def fetch_and_check_opportunity(symbol: str):
             )
             await send_telegram_message(message)
 
-        # Sell Opportunity based on strategy signal and price check
+        # Sell Opportunity detected
         elif opportunity == "Sell" and symbol in signals:
             buy_price = signals[symbol]['buy_price']
             sell_price = close_price
 
-            # Only proceed if the sell price is greater than the buy price
+            # Only sell if the sell price is higher than the buy price
             if sell_price > buy_price:
                 profit = sell_price - buy_price
 
@@ -111,14 +112,37 @@ async def fetch_and_check_opportunity(symbol: str):
         logger.error(f"Error fetching data for {symbol}: {str(e)}")
         return None
 
+# Function to display current active and closed signals
+def display_signals():
+    if signals:
+        logger.info("===== Current Active Signals =====")
+        for symbol, signal in signals.items():
+            # Check if there is a sell signal
+            if "sell_price" in signal:
+                logger.info(
+                    f"Symbol: {symbol} | Buy Price: {signal['buy_price']} | Buy Time: {signal['buy_time']} | "
+                    f"Sell Price: {signal['sell_price']} | Sell Time: {signal['sell_time']} | "
+                    f"Profit: {signal['profit']}"
+                )
+            else:
+                # Only buy signal present, no sell yet
+                logger.info(
+                    f"Symbol: {symbol} | Buy Price: {signal['buy_price']} | Buy Time: {signal['buy_time']}"
+                )
+    else:
+        logger.info("No active signals at the moment.")
+
 # Function to fetch opportunities for multiple symbols
 async def fetch_opportunities_for_symbols(symbols):
     while True:
         for symbol in symbols:
             await fetch_and_check_opportunity(symbol)
+        # display signals 
+        display_signals()
 
-        # Sleep for 15 minutes before checking again
-        await asyncio.sleep(301)  # 15 minutes (900 seconds)
+        # Wait for 5 minutes before checking again
+        await asyncio.sleep(61)
+
 
 # FastAPI startup event to start monitoring
 @app.on_event("startup")
@@ -127,12 +151,15 @@ async def startup_event():
         "BTCUSDT",  # Bitcoin
         "ETHUSDT",  # Ethereum
         "BNBUSDT",  # BNB
-        "ADAUSDT",  # Cardano
-        "DOGEUSDT", # Dogecoin
-        "SOLUSDT",  # Solana
-        "DOTUSDT",  # Polkadot
-        "MATICUSDT"  # Polygon
+        "XRPUSDT",  # Ripple (XRP)
+        "ADAUSDT",  # Cardano (ADA)
+        "SOLUSDT",  # Solana (SOL)
+        "MATICUSDT",  # Polygon (MATIC)
+        "LTCUSDT",  # Litecoin (LTC)
+        "LINKUSDT",  # Chainlink (LINK)
+        "DOTUSDT"  # Polkadot (DOT)
     ]
+
     
     logger.info("Starting monitoring for symbols...")
     logger.info(f"BOT_TOKEN: {BOT_TOKEN}, CHANNEL_ID: {CHANNEL_ID}")

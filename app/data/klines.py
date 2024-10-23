@@ -31,21 +31,42 @@ class BinanceKlines:
             response = requests.get(base_url, params=params, headers=headers)
             response.raise_for_status()
             klines = response.json()
+
             if not klines:
                 raise BinanceAPIError("No klines data returned")
             return klines
         except requests.exceptions.RequestException as e:
             raise BinanceAPIError(f"Binance API error: {str(e)}")
 
+
     def convert_data_to_dataframe(self):
         try:
             df = pd.DataFrame(self.data, columns=KlineColumns.COLUMNS)
+            
+            # Check if 'close_time' exists before proceeding
+            if 'close_time' not in df.columns:
+                logger.error("Error: 'close_time' column is missing.")
+                raise ValueError("'close_time' column is missing from the data.")
+
+            # Convert prices and volumes to float
             for col in ["open_price", "high_price", "low_price", "close_price", "volume", "quote_asset_volume", 
                         "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume"]:
                 df[col] = df[col].astype(float)
+            
+            # Convert number of trades to integer
             df["number_of_trades"] = df["number_of_trades"].astype(int)
+
+            # Convert 'open_time' and 'close_time' to datetime
             df["open_time"] = pd.to_datetime(df["open_time"], unit='ms')
             df["close_time"] = pd.to_datetime(df["close_time"], unit='ms')
-            return df.drop(columns=["ignored"], axis=1)
+
+            # Ensure 'close_time' is not dropped accidentally
+            df.set_index('close_time', inplace=True)
+
+
+            # Drop irrelevant columns if necessary
+            return df.drop(columns=["ignored"], axis=1, errors='ignore')
+        
         except Exception as e:
             raise BinanceAPIError(f"Data conversion error: {str(e)}")
+
